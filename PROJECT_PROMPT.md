@@ -40,8 +40,9 @@ Focuses on stability and usability.
 ## Technical Specifications
 - **Language**: TypeScript / Node.js.
 - **Schema Validation**: TypeBox.
-- **Regex Support**: Parameters must match regex; omitted parameters are wildcards.
-- **Priority**: Rules are concatenated and evaluated top-to-bottom (last match wins).
+- **Regex Support**: Parameters must match regex; omitted parameters are wildcards. 
+- **Dynamic Paths**: Support `${CWD}` and `${HOME}` variables in configuration patterns, resolved at runtime.
+- **Path Normalization**: All paths must be normalized (absolute paths, resolving `..`, `.`, and symlinks) before permission matching.
   1. Global (`~/CONFIG_DIR_NAME/agent/permissions.yaml`)
   2. Project (`CONFIG_DIR_NAME/permissions.yaml`)
   3. Project Local (`CONFIG_DIR_NAME/permissions.local.yaml`)
