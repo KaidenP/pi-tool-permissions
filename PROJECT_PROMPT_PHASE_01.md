@@ -30,6 +30,8 @@ Initialize the project structure and implement the logic to load, parse, and res
       ```
 - [ ] **YAML Loader & Regex Parser**:
     - Implement logic to load the four configuration scopes.
+    - **Path Normalization**: Ensure all incoming tool arguments (paths) and configuration patterns are normalized to absolute paths, resolving `..`, `.`, and symlinks before matching.
+    - **Variable Interpolation**: Before matching, replace `${CWD}` with the current working directory and `${HOME}` with the user's home directory in the configuration regex.
     - **Matching Logic**: A rule matches if the `tool` name is exactly equal AND all specified `parameters` exist in the tool call and match the provided regex. 
     - **Wildcards**: Parameters omitted from the `parameters` block are treated as wildcards (match any value).
 - [ ] **Priority Resolver**:
