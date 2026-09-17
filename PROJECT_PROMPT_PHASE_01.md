@@ -1,29 +1,47 @@
-# Phase 1: Project Setup & Foundation
+# Phase 1: Configuration Engine & Foundation
 
 ## Overview
-Initialize the project structure, install dependencies, and create the basic extension skeleton for the Pi Tool Permissions Extension. Reference: [Pi Extensions Documentation](docs/extensions.md#writing-an-extension) (Lines 100-200).
+Initialize the project structure and implement the logic to load, parse, and resolve permissions from YAML configuration files. This phase establishes the "source of truth" for the permission system.
+
+## Technical Requirements
+- **Language**: TypeScript / Node.js.
+- **Dependencies**: `typebox` (schema validation), `js-yaml` (parsing), `@earendil-works/pi-coding-agent` (types and `CONFIG_DIR_NAME` constant).
+- **Configuration Paths**:
+  Use the `CONFIG_DIR_NAME` constant from `@earendil-works/pi-coding-agent`.
+  | Scope | Path |
+  | :--- | :--- |
+  | Global | `~/CONFIG_DIR_NAME/agent/permissions.yaml` |
+  | Project | `ctx.cwd/CONFIG_DIR_NAME/permissions.yaml` |
+  | Project Local | `ctx.cwd/CONFIG_DIR_NAME/permissions.local.yaml` |
+  | Session | Derived from `ctx.sessionManager.getSessionFile()` (replace `.jsonl` with `.permissions.yaml`) |
 
 ## Tasks
-...
-- [ ] **Project Initialization**: Create a directory structure suitable for a TypeScript project and initialize a Git repository.
-- [ ] **Git Commit**: Make at least one commit after initializing the project structure and git repo.
-- [ ] **Dependency Management**: Initialize `package.json` and install:
-    - `typebox`: For schema validation of configuration files.
-    - `js-yaml`: For parsing the YAML configuration files.
-    - `@earendil-works/pi-coding-agent`: The core Pi extension types.
-    - `typescript`, `@types/node`: Development dependencies.
-- [ ] **Extension Skeleton**: Create `src/index.ts` as the entry point for the extension. It should export a default function that receives the `ExtensionAPI`.
-- [ ] **Configuration Schema**: Define TypeBox schemas in `src/schemas.ts` to validate:
-    - The structure of project and global configuration files (`permissions.yaml`, `permissions.local.yaml`).
-    - The tool and argument patterns using the specified YAML syntax.
-- [ ] **Permission Logging**: Implement a logging system that creates and maintains a log file at `~/$CONFIG_DIR_NAME/agent/logs/permissions.log`. This logger must record every tool call with the following details:
-    - Tool name
-    - Timestamp
-    - Approval status (Approved / Denied)
-    - Authorization reason (e.g., which permission file authorized it, or if the user specifically authorized it).
-  Use the `tool_call` event from the Pi Extension API to intercept and log these calls, utilizing `ctx.ui` for any required user confirmations as described in the documentation.
+- [ ] **Project Initialization**:
+    - Setup TypeScript project structure.
+    - Initialize `package.json` and install dependencies: `typebox`, `js-yaml`, `@earendil-works/pi-coding-agent`.
+- [ ] **Configuration Schema**:
+    - Define TypeBox schemas in `src/schemas.ts` to validate the structure of the permission files.
+    - Syntax:
+      ```yaml
+      - tool: "<tool_name>"
+        parameters:
+          "<param_name>": "<regex>"
+        permission: "<allow|deny|ask>"
+      ```
+- [ ] **YAML Loader & Regex Parser**:
+    - Implement logic to load the four configuration scopes.
+    - **Matching Logic**: A rule matches if the `tool` name is exactly equal AND all specified `parameters` exist in the tool call and match the provided regex. 
+    - **Wildcards**: Parameters omitted from the `parameters` block are treated as wildcards (match any value).
+- [ ] **Priority Resolver**:
+    - Implement resolution by concatenating rules from all sources into a single array.
+    - **Evaluation Order**: Global $\rightarrow$ Project $\rightarrow$ Project Local $\rightarrow$ Session.
+    - **Rule Winner**: The last matching entry in the array wins (last match priority).
+- [ ] **Permission Logging**: 
+    - Implement a logger that records every tool call to `~/CONFIG_DIR_NAME/agent/logs/permissions.log`.
+    - Include: Tool name, Timestamp, Action (Allowed/Denied/Asked), and the specific config file that triggered the decision.
 
 ## Success Criteria
-- A working project structure with all dependencies installed.
-- An extension skeleton that can be loaded by Pi without errors.
-- Validated schemas for the YAML configuration files.
+- Config files are correctly loaded and merged from all four scopes.
+- Regex patterns correctly match tool arguments with wildcard support.
+- Permission resolution follows the specified priority order.
+- All inputs are validated against TypeBox schemas.

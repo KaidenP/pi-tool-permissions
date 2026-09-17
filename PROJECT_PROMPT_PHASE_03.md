@@ -1,23 +1,27 @@
-# Phase 3: Permission Logic & Interception
+# Phase 3: Validation & Refinement
 
 ## Overview
-Implement the core logic for intercepting tool calls and blocking/prompting based on configuration rules. Reference: [Pi Tool Events](docs/extensions.md#tool-events) (Lines 350-600).
+Verify the extension's functionality through comprehensive testing, handle edge cases, and finalize documentation.
 
 ## Tasks
-...
-- [ ] **Event Subscription**: Subscribe to the `tool_call` event using `pi.on("tool_call", ...)` in the extension entry point.
-- [ ] **Interception Middleware**: Implement the logic within the `tool_call` handler:
-    - Identify the tool name and its arguments from the event.
-    - Query the Configuration Engine (from Phase 2) for the required action (`allow`, `deny`, `ask`).
-    - If `deny`: Block execution by returning `{ block: true, reason: "Blocked by configuration" }`.
-    - If `ask`: Trigger the TUI prompt (to be implemented in Phase 4).
-    - If `allow`: Allow the tool call to proceed.
-- [ ] **Default Rules Implementation**: Hardcode a set of default security rules as a fallback when no config is found:
-    - All tools default to `ask`
-
-- [ ] **Git Commit**: Make at least one commit after completing the tasks in this phase.
+- [ ] **Unit Tests**: Create a suite of tests for:
+    - The regex parser (testing complex patterns and wildcard behavior).
+    - The priority resolver (verifying Global $\rightarrow$ Project $\rightarrow$ Local $\rightarrow$ Session priority).
+    - Configuration loading and schema validation.
+- [ ] **Integration Tests**: 
+    - Verify that built-in tools (`read`, `bash`, `edit`) are correctly managed.
+    - Confirm that TUI prompts function correctly across different modes.
+    - Verify persistence of "Always" permissions across session restarts.
+- [ ] **Edge Case Handling**: 
+    - **Self-Protection**: Ensure the extension does not block its own configuration files or critical `pi` system paths.
+    - **Robustness**: Gracefully handle malformed YAML files (log error and default to `ask` rather than crashing).
+    - **Performance**: Ensure the config resolution does not introduce noticeable latency to tool calls.
+- [ ] **Documentation**: 
+    - Write a `README.md` explaining how to install and use the extension.
+    - Provide example `permissions.yaml` templates for different profiles (e.g., "Strict", "Developer", "Trusted").
 
 ## Success Criteria
-- The extension correctly intercepts all tool calls.
-- Tools are blocked/allowed according to the configuration engine's output.
-- Default security rules are applied correctly when no config is present.
+- All unit tests pass with high coverage of the resolution logic.
+- Integration tests confirm all requirements from the main project prompt are met.
+- Extension handles malformed configs and system paths without failure.
+- User documentation is clear and includes working examples.
