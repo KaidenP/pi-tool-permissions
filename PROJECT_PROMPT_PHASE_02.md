@@ -5,7 +5,7 @@ Implement the core logic for intercepting tool calls and the TUI interaction lay
 
 ## Technical Requirements
 - **Event**: Use `pi.on("tool_call", ...)` to intercept calls.
-- **Blocking**: Return `{ block: true, reason: "..." }` to stop execution.
+- **Blocking**: Return `{ block: true, reason: "...", terminate: true }` to stop execution and terminate the turn.
 - **UI**: Use `ctx.ui.confirm` and `ctx.ui.select` for interaction.
 
 ## Tasks
@@ -13,7 +13,7 @@ Implement the core logic for intercepting tool calls and the TUI interaction lay
     - Subscribe to `tool_call` in the entry point.
     - Query the Configuration Engine (Phase 1) for the action (`allow`, `deny`, `ask`).
     - **Default Behavior**: If no matching rule is found across any config file, default to `ask`.
-    - If `deny`: Block execution immediately.
+    - If `deny`: Block execution immediately and terminate the turn (`terminate: true`).
     - If `allow`: Allow execution to proceed.
     - If `ask`: Trigger the User Prompt UI.
 - [ ] **User Prompt UI**:

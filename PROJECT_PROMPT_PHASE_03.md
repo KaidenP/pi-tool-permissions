@@ -6,7 +6,7 @@ Verify the extension's functionality through comprehensive testing, handle edge 
 ## Tasks
 - [ ] **Unit Tests**: Create a suite of tests for:
     - The regex parser (testing complex patterns and wildcard behavior).
-    - The priority resolver (verifying Global $\rightarrow$ Project $\rightarrow$ Local $\rightarrow$ Session priority).
+    - The priority resolver (verifying Global -> Project -> Local -> Session priority).
     - Configuration loading and schema validation.
 - [ ] **Integration Tests**: 
     - Verify that built-in tools (`read`, `bash`, `edit`) are correctly managed.

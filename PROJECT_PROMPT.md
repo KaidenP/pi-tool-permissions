@@ -46,7 +46,7 @@ Focuses on stability and usability.
   1. Global (`~/CONFIG_DIR_NAME/agent/permissions.yaml`)
   2. Project (`CONFIG_DIR_NAME/permissions.yaml`)
   3. Project Local (`CONFIG_DIR_NAME/permissions.local.yaml`)
-  4. Session (Derived from `ctx.sessionManager.getSessionFile()`)
+  4. Session (Derived from `ctx.sessionManager.getSessionFile()`; in-memory only if ephemeral)
 - **Extension API**: Use `ExtensionAPI` and the `CONFIG_DIR_NAME` constant from `@earendil-works/pi-coding-agent`.
 
 ## Success Criteria

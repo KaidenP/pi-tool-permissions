@@ -13,12 +13,13 @@ Initialize the project structure and implement the logic to load, parse, and res
   | Global | `~/CONFIG_DIR_NAME/agent/permissions.yaml` |
   | Project | `ctx.cwd/CONFIG_DIR_NAME/permissions.yaml` |
   | Project Local | `ctx.cwd/CONFIG_DIR_NAME/permissions.local.yaml` |
-  | Session | Derived from `ctx.sessionManager.getSessionFile()` (replace `.jsonl` with `.permissions.yaml`) |
+  | Session | Derived from `ctx.sessionManager.getSessionFile()` (replace `.jsonl` with `.permissions.yaml`); in-memory only if ephemeral |
 
 ## Tasks
 - [ ] **Project Initialization**:
     - Setup TypeScript project structure.
     - Initialize `package.json` and install dependencies: `typebox`, `js-yaml`, `@earendil-works/pi-coding-agent`.
+    - Ensure necessary directory structures exist (e.g., `~/CONFIG_DIR_NAME/agent/logs/`).
 - [ ] **Configuration Schema**:
     - Define TypeBox schemas in `src/schemas.ts` to validate the structure of the permission files.
     - Syntax:
