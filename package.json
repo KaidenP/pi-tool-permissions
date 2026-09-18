@@ -1,0 +1,14 @@
+{
+  "name": "pi-tool-permissions",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "dependencies": {
+    "typebox": "^0.34.0",
+    "js-yaml": "^4.1.0",
+    "@earendil-works/pi-coding-agent": "^0.85.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
+}
