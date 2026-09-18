@@ -13,8 +13,7 @@ Verify the extension's functionality through comprehensive testing, handle edge 
     - Confirm that TUI prompts function correctly across different modes.
     - Verify persistence of "Always" permissions across session restarts.
 - [ ] **Edge Case Handling**: 
-    - **Self-Protection**: Ensure the extension does not block its own configuration files or critical `pi` system paths.
-    - **Robustness**: Gracefully handle malformed YAML files (log error and default to `ask` rather than crashing).
+    - **Robustness**: Exit the process on YAML decode failure or missing required keys (`tool`, `policy`). Ignore extra keys in config objects.
     - **Performance**: Ensure the config resolution does not introduce noticeable latency to tool calls.
 - [ ] **Documentation**: 
     - Write a `README.md` explaining how to install and use the extension.

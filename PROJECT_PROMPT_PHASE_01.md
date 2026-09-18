@@ -22,26 +22,38 @@ Initialize the project structure and implement the logic to load, parse, and res
     - Ensure necessary directory structures exist (e.g., `~/CONFIG_DIR_NAME/agent/logs/`).
 - [ ] **Configuration Schema**:
     - Define TypeBox schemas in `src/schemas.ts` to validate the structure of the permission files.
+    - **Validation Failure Behavior**: If YAML decoding fails or required keys (`tool`, `policy`) are missing, exit the process. Ignore extra keys in config objects.
     - Syntax:
       ```yaml
       - tool: "<tool_name>"
         parameters:
           "<param_name>": "<regex>"
-        permission: "<allow|deny|ask>"
+        policy: "<policy_key>" # e.g., allow, deny, ask
+        priority: <number>        # Optional, defaults to 0
       ```
 - [ ] **YAML Loader & Regex Parser**:
-    - Implement logic to load the four configuration scopes.
+    - Implement logic to load the four configuration scopes. Exit the process if YAML decoding fails or required keys (`tool`, `policy`) are missing in any rule. Ignore extra keys in config objects.
     - **Path Normalization**: Ensure all incoming tool arguments (paths) and configuration patterns are normalized to absolute paths, resolving `..`, `.`, and symlinks before matching.
     - **Variable Interpolation**: Before matching, replace `${CWD}` with the current working directory and `${HOME}` with the user's home directory in the configuration regex.
     - **Matching Logic**: A rule matches if the `tool` name is exactly equal AND all specified `parameters` exist in the tool call and match the provided regex. 
     - **Wildcards**: Parameters omitted from the `parameters` block are treated as wildcards (match any value).
 - [ ] **Priority Resolver**:
     - Implement resolution by concatenating rules from all sources into a single array.
-    - **Evaluation Order**: Global $\rightarrow$ Project $\rightarrow$ Project Local $\rightarrow$ Session.
-    - **Rule Winner**: The last matching entry in the array wins (last match priority).
+    - **Evaluation Order**: Global -> Project -> Project Local -> Session.
+    - **Rule Winner**:
+      1. Filter for all matching entries.
+      2. Sort by `priority` descending.
+      3. If priorities are equal, the last entry in the array (lowest scope/most local) wins.
+      4. If no rules match, apply a virtual `ask` policy with priority 0.
+      5. The winning rule's `policy` key and `priority` are passed to the `PolicyRegistry`.
+- [ ] **Policy Registry**:
+    - Implement a singleton `PolicyRegistry` that allows other extensions to register handlers for specific `policy` keys.
+    - Define a `PolicyDecision` return type: `{ decision: 'allow' | 'deny' | 'ask' | string , priority: number }`.
+    - Provide default handlers for `allow`, `deny`, and `ask`.
 - [ ] **Permission Logging**: 
     - Implement a logger that records every tool call to `~/CONFIG_DIR_NAME/agent/logs/permissions.log`.
     - Include: Tool name, Timestamp, Action (Allowed/Denied/Asked), and the specific config file that triggered the decision.
+    - limit the log to 500 lines (trim from top after each write)
 
 ## Success Criteria
 - Config files are correctly loaded and merged from all four scopes.

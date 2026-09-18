@@ -3,6 +3,8 @@
 ## Overview
 Create a pi extension that manages toolcall permissions. The goal is to provide a security layer where the agent must request user permission before executing certain tools or accessing specific files/paths, while allowing for granular overrides via configuration.
 
+The system is designed to be extensible, allowing other extensions to register custom policy handlers (e.g., an AI-driven risk assessment) that can be triggered via the configuration. The built-in policy keys are `allow`, `deny`, and `ask`.
+
 **General Requirement**: Every phase of this project must conclude with a logical Git commit.
 
 ---
@@ -19,7 +21,9 @@ Focuses on the "source of truth".
 - **Setup**: Project init and dependency installation (`typebox`, `js-yaml`).
 - **Schemas**: Define strict validation for permission rules.
 - **Loader**: Implement loading for Global, Project, Project Local, and Session scopes.
-- **Logic**: Build a regex-based matching parser and a "last match wins" priority resolver.
+- **Logic**: Build a regex-based matching parser and a priority-based resolver. 
+  - **Priority**: Rules can define an optional `priority` (default 0). The rule with the highest priority wins; if priorities tie, the last defined rule wins.
+  - **Extensibility**: Implement a `PolicyRegistry` where handlers for specific policy keys (e.g., `allow`, `deny`, `ask`) can be registered. Extensions may register custom policy keys.
 - **Logging**: Implement a security log for all permission decisions.
 
 ## Phase 2: Interception & User Interaction
