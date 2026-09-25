@@ -94,10 +94,8 @@ function makePromptTitle(toolName: string, parameters: Record<string, unknown>):
 
 
 function priorityForNewAllowRule(winningRule: PermissionRuleRecord): number {
-  const current = Math.max(0, winningRule.priority ?? 0)
-  const increment = Math.max(1, Math.abs(current) * Number.EPSILON * 2)
-  const candidate = current + increment
-  return Number.isFinite(candidate) && candidate > current ? candidate : current
+  const current = Math.max(0, Math.floor(winningRule.priority ?? 0))
+  return current + 1
 }
 
 function denied(reason: string): ToolCallEventResult {
@@ -146,6 +144,7 @@ export function createPermissionHandler(options: PermissionHandlerOptions = {}) 
       const projectRules = projectTrusted ? loadConfig(paths.project) : []
       const projectLocalRules = projectTrusted ? loadConfig(paths.projectLocal) : []
       const sessionRules = paths.session ? loadConfig(paths.session) : []
+      // Scope order: global, project, project-local, session + in-memory ephemerals.
       const scopes = [
         globalRules,
         projectRules,

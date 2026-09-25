@@ -42,6 +42,7 @@ export function createAllowRule(
 }
 
 /** Append a validated rule without discarding existing or extension-owned keys. */
+/** Atomic persistence: write to temp file then rename to avoid partial reads. */
 export function appendPermissionRule(path: string, rule: PermissionRuleRecord): void {
   const directory = dirname(path);
   mkdirSync(directory, { recursive: true, mode: 0o700 });

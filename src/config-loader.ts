@@ -57,6 +57,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+/** Fail-closed: malformed permission files block rather than allow. */
 function failConfig(path: string, error: unknown): never {
   console.error(`Invalid permissions config ${path}:`, error);
   process.exit(1);

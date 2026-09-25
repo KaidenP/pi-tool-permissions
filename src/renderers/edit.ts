@@ -1,5 +1,6 @@
 import { registerPromptRenderer } from "../prompt-registry.js"
 
+// Renderer for file edits; displays target file path.
 registerPromptRenderer("edit", (_event, params) => {
   const path = typeof params.path === "string" ? params.path : "<unknown>"
   // const edits = Array.isArray(params.edits) ? params.edits : []
