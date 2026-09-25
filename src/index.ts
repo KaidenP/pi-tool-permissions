@@ -30,6 +30,8 @@ import {
 } from "./prompt-registry.js"
 import { PROMPT_CHOICES, resolveChoice, makePromptTitle, priorityForNewAllowRule, denied, type ChoiceKey } from "./prompt-builder.js"
 import { persistChoice } from "./middleware/persistence.js"
+import { modeState } from "./mode-manager.js"
+import { isBypass, renderWidgetLines, statusText } from "./bypass-widget.js"
 import "./renderers/edit.js"
 import "./renderers/read.js"
 import "./renderers/bash.js"
@@ -86,6 +88,12 @@ export function createPermissionHandler(options: PermissionHandlerOptions = {}) 
       if (!isRecord(event.input)) {
         logger(event.toolName, "Denied", "invalid-tool-input")
         return denied("Tool arguments were not a valid object")
+      }
+
+      // Bypass mode: skip all permission gates
+      if (isBypass()) {
+        logger(event.toolName, "BYPASS", "permission-bypass")
+        return { block: false }
       }
 
       const cwd = ctx.cwd || process.cwd()
@@ -180,19 +188,19 @@ export function createPermissionHandler(options: PermissionHandlerOptions = {}) 
           rule,
           sessionRulesInMemory,
           projectTrusted,
-        );
-        persistedTo = persistenceResult.persistedTo;
+        )
+        persistedTo = persistenceResult.persistedTo
         if (persistenceResult.needsMemory && persistenceResult.memorySource) {
-          const memorySource = persistenceResult.memorySource;
+          const memorySource = persistenceResult.memorySource
           try {
             if (ctx.hasUI) {
               ctx.ui.notify(
                 "Saved the project grant. It applies for this session; Pi project trust is required to honor it after restart.",
                 "warning",
-              );
+              )
             }
           } catch (error) {
-            console.error("Could not notify about pending project trust:", error);
+            console.error("Could not notify about pending project trust:", error)
           }
         }
       } catch (error) {
@@ -242,7 +250,54 @@ export default function (pi: ExtensionAPI): void {
     }
   })
 
-  pi.on("session_shutdown", () => {
+  pi.registerFlag("bypass-permissions", {
+    description: "Start with permission bypass mode enabled",
+    type: "boolean",
+    default: false,
+  })
+
+  if (pi.getFlag("bypass-permissions")) {
+    modeState.set("permission-bypass")
+  }
+
+  pi.registerCommand("permission-bypass", {
+    description: "Toggle permission bypass mode",
+    handler: async (_args, ctx) => {
+      const newMode = modeState.toggle()
+      const label = newMode === "permission-bypass" ? "BYPASS ACTIVE" : "DEFAULT"
+      if (ctx.hasUI) {
+        ctx.ui.notify(`Permission mode: ${label}`, "warning")
+        ctx.ui.setStatus("permissions", statusText())
+        ctx.ui.setWidget("permission-bypass", renderWidgetLines())
+      }
+    },
+  })
+
+  pi.registerShortcut("ctrl+shift+b", {
+    description: "Toggle permission bypass mode",
+    handler: async (ctx) => {
+      const newMode = modeState.toggle()
+      const label = newMode === "permission-bypass" ? "BYPASS ACTIVE" : "DEFAULT"
+      if (ctx.hasUI) {
+        ctx.ui.notify(`Permission mode: ${label}`, "warning")
+        ctx.ui.setStatus("permissions", statusText())
+        ctx.ui.setWidget("permission-bypass", renderWidgetLines())
+      }
+    },
+  })
+
+  pi.on("session_start", async (_event, ctx) => {
+    if (ctx.hasUI) {
+      ctx.ui.setStatus("permissions", statusText())
+      ctx.ui.setWidget("permission-bypass", renderWidgetLines())
+    }
+  })
+
+  pi.on("session_shutdown", async (_event, ctx) => {
+    if (ctx?.hasUI) {
+      // try { (ctx.ui as any)?.setStatus?.("permissions", "DEFAULT"); } catch {}
+      try { (ctx.ui as any)?.setWidget?.("permission-bypass", []) } catch { }
+    }
     removePolicyListener()
     for (const unregister of unregisterPolicies.splice(0)) unregister()
   })
