@@ -13,7 +13,7 @@ Verify the extension's functionality through comprehensive testing, handle edge 
     - Confirm that TUI prompts function correctly across different modes.
     - Verify persistence of "Always" permissions across session restarts.
 - [ ] **Edge Case Handling**: 
-    - **Robustness**: Exit the process on YAML decode failure or missing required keys (`tool`, `policy`). Ignore extra keys in config objects.
+    - **Robustness**: Exit the process on YAML decode failure or missing required keys (`tool`, `policy`). Preserve extra/unknown keys in config objects (do not strip them) so future extensions may rely on additional rule keys.
     - **Performance**: Ensure the config resolution does not introduce noticeable latency to tool calls.
 - [ ] **Documentation**: 
     - Write a `README.md` explaining how to install and use the extension.

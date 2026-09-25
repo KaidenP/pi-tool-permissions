@@ -22,7 +22,7 @@ Initialize the project structure and implement the logic to load, parse, and res
     - Ensure necessary directory structures exist (e.g., `~/CONFIG_DIR_NAME/agent/logs/`).
 - [ ] **Configuration Schema**:
     - Define TypeBox schemas in `src/schemas.ts` to validate the structure of the permission files.
-    - **Validation Failure Behavior**: If YAML decoding fails or required keys (`tool`, `policy`) are missing, exit the process. Ignore extra keys in config objects.
+    - **Validation Failure Behavior**: If YAML decoding fails or required keys (`tool`, `policy`) are missing, exit the process. Extra/unknown keys in config objects must be preserved (not stripped) so that future extensions can use additional keys in rules.
     - Syntax:
       ```yaml
       - tool: "<tool_name>"
@@ -32,7 +32,7 @@ Initialize the project structure and implement the logic to load, parse, and res
         priority: <number>        # Optional, defaults to 0
       ```
 - [ ] **YAML Loader & Regex Parser**:
-    - Implement logic to load the four configuration scopes. Exit the process if YAML decoding fails or required keys (`tool`, `policy`) are missing in any rule. Ignore extra keys in config objects.
+    - Implement logic to load the four configuration scopes. Exit the process if YAML decoding fails or required keys (`tool`, `policy`) are missing in any rule. Preserve extra/unknown keys in rules (do not clean/remove them) to allow future extensions to use added keys.
     - **Path Normalization**: Ensure all incoming tool arguments (paths) and configuration patterns are normalized to absolute paths, resolving `..`, `.`, and symlinks before matching.
     - **Variable Interpolation**: Before matching, replace `${CWD}` with the current working directory and `${HOME}` with the user's home directory in the configuration regex.
     - **Matching Logic**: A rule matches if the `tool` name is exactly equal AND all specified `parameters` exist in the tool call and match the provided regex. 
