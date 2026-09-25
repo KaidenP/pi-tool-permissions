@@ -4,15 +4,15 @@ import { PolicyRegistry } from "./policy-registry";
 import { matchRule, resolveRules, normalizePath, interpolatePattern } from "./config-loader";
 
 describe("PolicyRegistry", () => {
-  test("default allow/deny/ask registered", () => {
+  test("default allow/deny/ask registered", async () => {
     const reg = new PolicyRegistry();
-    assert.strictEqual(reg.resolve({ policy: "allow", priority: 1 }).decision, "allow");
-    assert.strictEqual(reg.resolve({ policy: "deny", priority: 2 }).decision, "deny");
-    assert.strictEqual(reg.resolve({ policy: "ask", priority: 3 }).decision, "ask");
+    assert.strictEqual((await reg.resolve({ policy: "allow", priority: 1 })).decision, "allow");
+    assert.strictEqual((await reg.resolve({ policy: "deny", priority: 2 })).decision, "deny");
+    assert.strictEqual((await reg.resolve({ policy: "ask", priority: 3 })).decision, "ask");
   });
-  test("unknown policy defaults to ask", () => {
+  test("unknown policy defaults to ask", async () => {
     const reg = new PolicyRegistry();
-    assert.deepStrictEqual(reg.resolve({ policy: "unknown" }), { decision: "ask", priority: 0 });
+    assert.deepStrictEqual(await reg.resolve({ policy: "unknown" }), { decision: "ask", priority: 0 });
   });
 });
 

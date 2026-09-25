@@ -51,7 +51,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       const winningRule = resolveRules(scopes, event.toolName, normalizedParams, cwd);
-      const decision = registry.resolve(winningRule);
+      const decision = await registry.resolve(winningRule);
 
       if (decision.decision === "deny") {
         logDecision(event.toolName, "Denied", winningRule ? "config" : "default-deny");
