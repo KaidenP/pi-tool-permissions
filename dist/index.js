@@ -4,7 +4,9 @@ import { getConfigPaths, getRuleSource, loadConfig, normalizeToolParams, resolve
 import { logDecision } from "./log.js";
 import { appendPermissionRule, createAllowRule } from "./persistence.js";
 import { policyRegistryInstance, POLICY_REGISTRATION_EVENT, } from "./policy-registry.js";
+import { promptRendererInstance, registerPromptRenderer, } from "./prompt-registry.js";
 export { PolicyRegistry, policyRegistryInstance, POLICY_REGISTRATION_EVENT, registerPolicy, } from "./policy-registry.js";
+export { registerPromptRenderer, promptRendererInstance } from "./prompt-registry.js";
 const PROMPT_CHOICES = [
     "Deny",
     "Allow once",
@@ -32,6 +34,29 @@ function makePromptTitle(toolName, parameters) {
     const args = JSON.stringify(parameters, null, 2) ?? "{}";
     return `Permission required for ${toolName}\n\nArguments:\n${args}`;
 }
+// Default renderers for common tools
+registerPromptRenderer("edit", (_event, params) => {
+    const path = typeof params.path === "string" ? params.path : "<unknown>";
+    const edits = Array.isArray(params.edits) ? params.edits : [];
+    const bodyLines = [`File: ${path}`, "---"];
+    for (const edit of edits) {
+        const oldText = typeof edit.oldText === "string" ? edit.oldText : "";
+        const newText = typeof edit.newText === "string" ? edit.newText : "";
+        const lines = oldText.split("\n");
+        for (const line of lines) {
+            bodyLines.push("- " + line);
+        }
+        const newLines = newText.split("\n");
+        for (const line of newLines) {
+            bodyLines.push("+ " + line);
+        }
+    }
+    return {
+        kind: "default",
+        title: `Edit required for ${path}`,
+        body: bodyLines.join("\n"),
+    };
+});
 function priorityForNewAllowRule(winningRule) {
     const current = Math.max(0, winningRule.priority ?? 0);
     const increment = Math.max(1, Math.abs(current) * Number.EPSILON * 2);
@@ -105,7 +130,37 @@ export function createPermissionHandler(options = {}) {
                 logger(event.toolName, "Denied", `${logSource} (no UI available)`);
                 return denied("No UI is available to approve this tool call");
             }
-            const choice = await ctx.ui.select(makePromptTitle(event.toolName, event.input), [...PROMPT_CHOICES]);
+            // Custom prompt UI via registry (e.g., diff view for edit)
+            const customRenderer = promptRendererInstance.lookup(event.toolName);
+            let promptResult;
+            if (customRenderer) {
+                try {
+                    promptResult = await customRenderer(event, normalizedParameters);
+                }
+                catch (e) {
+                    console.error("Custom prompt renderer failed:", e);
+                }
+            }
+            let choice;
+            if (promptResult && promptResult.kind === "custom") {
+                // For custom kind, fall back to default select using title/choices
+                // Full component rendering requires host integration; use default for now
+                const customChoices = promptResult.choices ?? PROMPT_CHOICES.map((c) => ({ label: c, value: c }));
+                choice = await ctx.ui.select(promptResult.title, customChoices.map((c) => c.label));
+            }
+            else {
+                const defaultTitle = makePromptTitle(event.toolName, event.input);
+                const defaultChoices = (promptResult && promptResult.kind === "default" && promptResult.choices)
+                    ? promptResult.choices.map((c) => c.label)
+                    : [...PROMPT_CHOICES];
+                const promptTitle = (promptResult && promptResult.kind === "default" && promptResult.title)
+                    ? promptResult.title
+                    : defaultTitle;
+                const promptBody = (promptResult && promptResult.kind === "default" && promptResult.body)
+                    ? promptResult.body + "\n\n" + defaultTitle.split("\n\n")[1] ?? ""
+                    : defaultTitle;
+                choice = await ctx.ui.select(promptBody || promptTitle, defaultChoices);
+            }
             const selectedChoice = choice;
             const result = selectedChoice ? resolveChoice(selectedChoice) : { action: "deny" };
             if (result.action === "deny") {
