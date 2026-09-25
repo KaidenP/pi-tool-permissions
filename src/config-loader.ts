@@ -38,10 +38,11 @@ export function loadConfig(path: string): any {
         process.exit(1);
       }
       const cleaned: any = {};
+      const anyItem = item as any;
       for (const [k, v] of Object.entries(PermissionRuleSchema.properties)) {
-        if (k in item) cleaned[k] = item[k];
+        if (k in anyItem) cleaned[k] = anyItem[k];
       }
-      cleaned.priority = item.priority ?? 0;
+      cleaned.priority = anyItem.priority ?? 0;
       rules.push(cleaned);
     }
   }

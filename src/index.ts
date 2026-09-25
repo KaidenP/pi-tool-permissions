@@ -30,6 +30,9 @@ function persistRule(scopePath: string, rule: any) {
 export default function (pi: ExtensionAPI) {
   pi.on("tool_call", async (event, ctx) => {
     try {
+      if (!isToolCallEventType(event.toolName as string, event)) {
+        return { block: false };
+      }
       const cwd = ctx.cwd || process.cwd();
       const sessionFile = (ctx as any).sessionManager?.getSessionFile?.();
       const paths = getConfigPaths(cwd, sessionFile);

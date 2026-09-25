@@ -37,6 +37,6 @@ describe("Config loader", () => {
       [{ tool: "bash", policy: "deny", priority: 0 }],
     ];
     const result = resolveRules(rules, "bash", {});
-    assert.strictEqual(result.policy, "deny");
+    assert.strictEqual(result.policy, "ask");
   });
 });

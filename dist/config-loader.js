@@ -46,7 +46,14 @@ function loadConfig(path) {
                 console.error("Invalid config rule (TypeBox validation failed):", item);
                 process.exit(1);
             }
-            rules.push({ ...item, priority: item.priority ?? 0 });
+            const cleaned = {};
+            const anyItem = item;
+            for (const [k, v] of Object.entries(schemas_1.PermissionRuleSchema.properties)) {
+                if (k in anyItem)
+                    cleaned[k] = anyItem[k];
+            }
+            cleaned.priority = anyItem.priority ?? 0;
+            rules.push(cleaned);
         }
     }
     return rules;

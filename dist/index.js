@@ -31,6 +31,9 @@ function persistRule(scopePath, rule) {
 function default_1(pi) {
     pi.on("tool_call", async (event, ctx) => {
         try {
+            if (!(0, pi_coding_agent_1.isToolCallEventType)(event.toolName, event)) {
+                return { block: false };
+            }
             const cwd = ctx.cwd || process.cwd();
             const sessionFile = ctx.sessionManager?.getSessionFile?.();
             const paths = (0, config_loader_1.getConfigPaths)(cwd, sessionFile);
@@ -51,7 +54,7 @@ function default_1(pi) {
                 }
             }
             const winningRule = (0, config_loader_1.resolveRules)(scopes, event.toolName, normalizedParams, cwd);
-            const decision = registry.resolve(winningRule);
+            const decision = await registry.resolve(winningRule);
             if (decision.decision === "deny") {
                 (0, log_1.logDecision)(event.toolName, "Denied", winningRule ? "config" : "default-deny");
                 return { block: true, reason: "Denied by permission policy", terminate: true };
