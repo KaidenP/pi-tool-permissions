@@ -32,7 +32,8 @@ import {
   type PromptRenderer,
   type ChoiceConfig,
 } from "./prompt-registry.js"
-import "./renderers/default.js"
+import "./renderers/edit.js"
+import "./renderers/read.js"
 
 export {
   PolicyRegistry,
