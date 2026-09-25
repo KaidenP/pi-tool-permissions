@@ -15,15 +15,11 @@ registerPromptRenderer("read", async (_event, params) => {
   const offset = typeof params.offset === "number" ? params.offset : undefined
   const limit = typeof params.limit === "number" ? params.limit : undefined
 
-  const startStr = offset !== undefined ? `L${String(offset + 1).padStart(4, "0")}` : "<"
-  const endVal = offset !== undefined && limit !== undefined ? offset + limit : (limit !== undefined ? limit : undefined)
-  const endStr = endVal !== undefined ? `L${String(endVal).padStart(4, "0")}` : ">"
   const totalLines = filePath !== "<unknown>" ? await countLines(filePath) : undefined
+  const startStr = offset !== undefined ? `L${String(offset + 1).padStart(3, "0")}` : "L001"
+  const endVal = offset !== undefined && limit !== undefined ? offset + limit : (limit !== undefined ? limit : undefined)
+  const endStr = endVal !== undefined ? `L${String(endVal).padStart(3, "0")}` : (totalLines !== undefined ? `L${String(totalLines).padStart(3, "0")}` : "L999")
   const countStr = totalLines !== undefined ? `${totalLines} lines` : (limit !== undefined ? `${limit} lines` : "? lines")
 
-  return {
-    kind: "default",
-    title: `Read: ${filePath}`,
-    body: `${startStr}-${endStr} (${countStr})`,
-  }
+  return `Read: ${filePath}\n${startStr}-${endStr} (${countStr})`
 })

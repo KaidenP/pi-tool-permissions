@@ -28,9 +28,7 @@ import {
 import {
   promptRendererInstance,
   registerPromptRenderer,
-  type PromptUI,
   type PromptRenderer,
-  type ChoiceConfig,
 } from "./prompt-registry.js"
 import "./renderers/edit.js"
 import "./renderers/read.js"
@@ -43,7 +41,7 @@ export {
 } from "./policy-registry.js"
 export { registerPromptRenderer, promptRendererInstance } from "./prompt-registry.js"
 export type { PolicyDecision, PolicyHandler, PolicyHandlerContext } from "./policy-registry.js"
-export type { PromptUI, PromptRenderer, ChoiceConfig } from "./prompt-registry.js"
+export type { PromptRenderer } from "./prompt-registry.js"
 
 const PROMPT_CHOICES = [
   "Deny",
@@ -186,42 +184,17 @@ export function createPermissionHandler(options: PermissionHandlerOptions = {}) 
         return denied("No UI is available to approve this tool call")
       }
 
-      // Custom prompt UI via registry (e.g., diff view for edit)
       const customRenderer = promptRendererInstance.lookup(event.toolName)
-      let promptResult: PromptUI | undefined
+      let promptTitle = makePromptTitle(event.toolName, event.input)
       if (customRenderer) {
         try {
-          promptResult = await customRenderer(event, normalizedParameters)
+          promptTitle = await customRenderer(event, normalizedParameters)
         } catch (e) {
           console.error("Custom prompt renderer failed:", e)
         }
       }
 
-      let choice: string | undefined
-      if (promptResult && promptResult.kind === "custom") {
-        // For custom kind, fall back to default select using title/choices
-        // Full component rendering requires host integration; use default for now
-        const customChoices = promptResult.choices ?? PROMPT_CHOICES.map((c) => ({ label: c, value: c }))
-        choice = await ctx.ui.select(
-          promptResult.title,
-          customChoices.map((c) => c.label),
-        )
-      } else {
-        const defaultTitle = makePromptTitle(event.toolName, event.input)
-        const defaultChoices = (promptResult && promptResult.kind === "default" && promptResult.choices)
-          ? promptResult.choices.map((c) => c.label)
-          : [...PROMPT_CHOICES]
-        const promptTitle = (promptResult && promptResult.kind === "default" && promptResult.title)
-          ? promptResult.title
-          : defaultTitle
-        const promptBody = (promptResult && promptResult.kind === "default" && promptResult.body)
-          ? promptResult.body + "\n\n" + (defaultTitle.split("\n\n")[1] || "")
-          : defaultTitle
-        choice = await ctx.ui.select(
-          promptBody || promptTitle,
-          defaultChoices,
-        )
-      }
+      const choice = await ctx.ui.select(promptTitle, [...PROMPT_CHOICES])
 
       const selectedChoice = choice as ChoiceKey | undefined
       const result = selectedChoice ? resolveChoice(selectedChoice) : { action: "deny" }
