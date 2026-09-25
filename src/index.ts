@@ -35,6 +35,7 @@ export {
 export type { PolicyDecision, PolicyHandler, PolicyHandlerContext } from "./policy-registry.js";
 
 const PROMPT_CHOICES = [
+  "Deny",
   "Allow once",
   "Allow only in this session",
   "Allow always (Project-local)",
@@ -160,6 +161,11 @@ export function createPermissionHandler(options: PermissionHandlerOptions = {}) 
       const choiceIndex = PROMPT_CHOICES.indexOf(choice as (typeof PROMPT_CHOICES)[number]);
 
       if (choiceIndex === 0) {
+        logger(event.toolName, "Denied", "user-denied");
+        return denied("Permission denied by user");
+      }
+
+      if (choiceIndex === 1) {
         logger(event.toolName, "Allowed", "user-once");
         return { block: false };
       }
@@ -179,7 +185,7 @@ export function createPermissionHandler(options: PermissionHandlerOptions = {}) 
       let projectGrantNeedsTrust = false;
       try {
         switch (choiceIndex) {
-          case 1:
+          case 2:
             if (paths.session) {
               appendPermissionRule(paths.session, rule);
               persistedTo = paths.session;
@@ -189,17 +195,17 @@ export function createPermissionHandler(options: PermissionHandlerOptions = {}) 
               sessionRulesInMemory.push(rule);
             }
             break;
-          case 2:
+          case 3:
             appendPermissionRule(paths.projectLocal, rule);
             persistedTo = paths.projectLocal;
             projectGrantNeedsTrust = !projectTrusted;
             break;
-          case 3:
+          case 4:
             appendPermissionRule(paths.project, rule);
             persistedTo = paths.project;
             projectGrantNeedsTrust = !projectTrusted;
             break;
-          case 4:
+          case 5:
             appendPermissionRule(paths.global, rule);
             persistedTo = paths.global;
             break;

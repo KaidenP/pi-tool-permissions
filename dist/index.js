@@ -6,6 +6,7 @@ import { appendPermissionRule, createAllowRule } from "./persistence.js";
 import { policyRegistryInstance, POLICY_REGISTRATION_EVENT, } from "./policy-registry.js";
 export { PolicyRegistry, policyRegistryInstance, POLICY_REGISTRATION_EVENT, registerPolicy, } from "./policy-registry.js";
 const PROMPT_CHOICES = [
+    "Deny",
     "Allow once",
     "Allow only in this session",
     "Allow always (Project-local)",
@@ -95,6 +96,10 @@ export function createPermissionHandler(options = {}) {
             const choice = await ctx.ui.select(makePromptTitle(event.toolName, event.input), [...PROMPT_CHOICES]);
             const choiceIndex = PROMPT_CHOICES.indexOf(choice);
             if (choiceIndex === 0) {
+                logger(event.toolName, "Denied", "user-denied");
+                return denied("Permission denied by user");
+            }
+            if (choiceIndex === 1) {
                 logger(event.toolName, "Allowed", "user-once");
                 return { block: false };
             }
@@ -107,7 +112,7 @@ export function createPermissionHandler(options = {}) {
             let projectGrantNeedsTrust = false;
             try {
                 switch (choiceIndex) {
-                    case 1:
+                    case 2:
                         if (paths.session) {
                             appendPermissionRule(paths.session, rule);
                             persistedTo = paths.session;
@@ -118,17 +123,17 @@ export function createPermissionHandler(options = {}) {
                             sessionRulesInMemory.push(rule);
                         }
                         break;
-                    case 2:
+                    case 3:
                         appendPermissionRule(paths.projectLocal, rule);
                         persistedTo = paths.projectLocal;
                         projectGrantNeedsTrust = !projectTrusted;
                         break;
-                    case 3:
+                    case 4:
                         appendPermissionRule(paths.project, rule);
                         persistedTo = paths.project;
                         projectGrantNeedsTrust = !projectTrusted;
                         break;
-                    case 4:
+                    case 5:
                         appendPermissionRule(paths.global, rule);
                         persistedTo = paths.global;
                         break;

@@ -420,6 +420,7 @@ describe("Tool-call permission middleware", () => {
             assert.match(promptTitle, /Permission required for bash/);
             assert.match(promptTitle, /"command": "echo hi"/);
             assert.deepEqual(promptChoices, [
+                "Deny",
                 "Allow once",
                 "Allow only in this session",
                 "Allow always (Project-local)",
