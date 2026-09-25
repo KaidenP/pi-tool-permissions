@@ -21,14 +21,15 @@ import { CONFIG_DIR_NAME } from "@earendil-works/pi-coding-agent";
 import {
   getConfigPaths,
   getRuleSource,
+  interpolatePattern,
   loadConfig,
+  matchRule,
+  normalizePath,
+  normalizePathPattern,
+  normalizeToolParams,
   parseConfig,
-} from "./config-parser.js";
-import { resolveRules, matchRule } from "./match-engine.js";
-import { normalizeToolParams } from "./parameter-normalizer.js";
-import { normalizePath } from "./path-utils.js";
-import { normalizePathPattern } from "./match-engine.js";
-import { interpolatePattern } from "./path-utils.js";
+  resolveRules,
+} from "./config-loader.js";
 import permissionExtension, { createPermissionHandler } from "./index.js";
 import { trimLogFile } from "./log.js";
 import { appendPermissionRule, createAllowRule } from "./persistence.js";

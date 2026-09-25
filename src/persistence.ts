@@ -9,11 +9,9 @@ import {
 } from "node:fs";
 import { dirname } from "node:path";
 import { dump } from "js-yaml";
-import {
-  parameterValueToString,
-  parseConfig,
-  type PermissionRuleRecord,
-} from "./config-loader.js";
+import { parameterValueToString } from "./parameter-normalizer.js";
+import { parseConfig } from "./config-parser.js";
+import { RULE_SOURCE, type PermissionRuleRecord } from "./types.js";
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

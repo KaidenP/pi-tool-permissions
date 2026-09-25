@@ -10,14 +10,12 @@ import {
   getConfigPaths,
   getRuleSource,
   loadConfig,
-  matchRule,
-  normalizeToolParams,
-  resolveRules,
-  setRuleSource,
-  type PermissionRuleRecord,
-} from "./config-loader.js"
+} from "./config-parser.js"
+import { type PermissionRuleRecord } from "./types.js"
+import { resolveRules, matchRule } from "./match-engine.js"
+import { normalizeToolParams } from "./parameter-normalizer.js"
 import { logDecision } from "./log.js"
-import { appendPermissionRule, createAllowRule } from "./persistence.js"
+import { createAllowRule } from "./persistence.js"
 import {
   PolicyRegistry,
   policyRegistryInstance,
@@ -30,6 +28,8 @@ import {
   registerPromptRenderer,
   type PromptRenderer,
 } from "./prompt-registry.js"
+import { PROMPT_CHOICES, resolveChoice, makePromptTitle, priorityForNewAllowRule, denied, type ChoiceKey } from "./prompt-builder.js"
+import { persistChoice } from "./middleware/persistence.js"
 import "./renderers/edit.js"
 import "./renderers/read.js"
 import "./renderers/bash.js"
@@ -45,35 +45,6 @@ export { registerPromptRenderer, promptRendererInstance } from "./prompt-registr
 export type { PolicyDecision, PolicyHandler, PolicyHandlerContext } from "./policy-registry.js"
 export type { PromptRenderer } from "./prompt-registry.js"
 
-const PROMPT_CHOICES = [
-  "Deny",
-  "Allow once",
-  "Allow only in this session",
-  "Allow always (Project-local)",
-  "Allow always (Project)",
-  "Allow always (Global)",
-] as const
-
-type ChoiceKey = (typeof PROMPT_CHOICES)[number]
-
-type ChoiceResult =
-  | { action: "deny"; scope?: never }
-  | { action: "allow-once"; scope?: never }
-  | { action: "persist"; scope: "session" | "projectLocal" | "project" | "global" }
-
-function resolveChoice(choice: ChoiceKey): ChoiceResult {
-  let result: ChoiceResult
-  switch (choice) {
-    case "Deny": return { action: "deny" }
-    case "Allow once": return { action: "allow-once" }
-    case "Allow only in this session": return { action: "persist", scope: "session" }
-    case "Allow always (Project-local)": return { action: "persist", scope: "projectLocal" }
-    case "Allow always (Project)": return { action: "persist", scope: "project" }
-    case "Allow always (Global)": return { action: "persist", scope: "global" }
-  }
-  return { action: "deny", scope: undefined as never } as ChoiceResult
-}
-
 type PermissionLogger = (tool: string, action: string, source: string) => void
 
 export interface PermissionHandlerOptions {
@@ -85,21 +56,6 @@ export interface PermissionHandlerOptions {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value)
-}
-
-function makePromptTitle(toolName: string, parameters: Record<string, unknown>): string {
-  const args = JSON.stringify(parameters, null, 2) ?? "{}"
-  return `Permission required for ${toolName}\n\nArguments:\n${args}`
-}
-
-
-function priorityForNewAllowRule(winningRule: PermissionRuleRecord): number {
-  const current = Math.max(0, Math.floor(winningRule.priority ?? 0))
-  return current + 1
-}
-
-function denied(reason: string): ToolCallEventResult {
-  return { block: true, reason, terminate: true }
 }
 
 /**
@@ -217,34 +173,27 @@ export function createPermissionHandler(options: PermissionHandlerOptions = {}) 
       )
 
       let persistedTo = ""
-      let projectGrantNeedsTrust = false
       try {
-        if (result.action === "persist") {
-          const p = result as { action: "persist"; scope: "session" | "projectLocal" | "project" | "global" }
-          if (p.scope === "session") {
-            if (paths.session) {
-              appendPermissionRule(paths.session, rule)
-              persistedTo = paths.session
-            } else {
-              persistedTo = "session memory (ephemeral session)"
-              setRuleSource(rule, persistedTo)
-              sessionRulesInMemory.push(rule)
+        const persistenceResult = persistChoice(
+          result as { action: "persist"; scope: string },
+          paths,
+          rule,
+          sessionRulesInMemory,
+          projectTrusted,
+        );
+        persistedTo = persistenceResult.persistedTo;
+        if (persistenceResult.needsMemory && persistenceResult.memorySource) {
+          const memorySource = persistenceResult.memorySource;
+          try {
+            if (ctx.hasUI) {
+              ctx.ui.notify(
+                "Saved the project grant. It applies for this session; Pi project trust is required to honor it after restart.",
+                "warning",
+              );
             }
-          } else if (p.scope === "projectLocal") {
-            appendPermissionRule(paths.projectLocal, rule)
-            persistedTo = paths.projectLocal
-            projectGrantNeedsTrust = !projectTrusted
-          } else if (p.scope === "project") {
-            appendPermissionRule(paths.project, rule)
-            persistedTo = paths.project
-            projectGrantNeedsTrust = !projectTrusted
-          } else if (p.scope === "global") {
-            appendPermissionRule(paths.global, rule)
-            persistedTo = paths.global
+          } catch (error) {
+            console.error("Could not notify about pending project trust:", error);
           }
-        } else {
-          logger(event.toolName, "Denied", "user-cancelled")
-          return denied("Permission denied by user")
         }
       } catch (error) {
         console.error("Failed to persist permission rule:", error)
@@ -256,22 +205,6 @@ export function createPermissionHandler(options: PermissionHandlerOptions = {}) 
         }
         logger(event.toolName, "Allowed", "user-once (persistence failed)")
         return { block: false }
-      }
-
-      if (projectGrantNeedsTrust) {
-        const memorySource = "session memory (project trust pending)"
-        setRuleSource(rule, memorySource)
-        sessionRulesInMemory.push(rule)
-        try {
-          if (ctx.hasUI) {
-            ctx.ui.notify(
-              "Saved the project grant. It applies for this session; Pi project trust is required to honor it after restart.",
-              "warning",
-            )
-          }
-        } catch (error) {
-          console.error("Could not notify about pending project trust:", error)
-        }
       }
 
       logger(event.toolName, "Allowed", persistedTo)

@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync, } from "node:fs";
 import { dirname } from "node:path";
 import { dump } from "js-yaml";
-import { parameterValueToString, parseConfig, } from "./config-loader.js";
+import { parameterValueToString } from "./parameter-normalizer.js";
+import { parseConfig } from "./config-parser.js";
 function escapeRegExp(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -23,6 +24,7 @@ export function createAllowRule(tool, parameters, priority) {
     };
 }
 /** Append a validated rule without discarding existing or extension-owned keys. */
+/** Atomic persistence: write to temp file then rename to avoid partial reads. */
 export function appendPermissionRule(path, rule) {
     const directory = dirname(path);
     mkdirSync(directory, { recursive: true, mode: 0o700 });
