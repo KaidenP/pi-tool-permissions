@@ -1,16 +1,16 @@
 import { registerPromptRenderer } from "../prompt-registry.js"
-import { readFileSync } from "node:fs"
+import { readFile } from "node:fs/promises"
 
-function countLines(filePath: string): number | undefined {
+async function countLines(filePath: string): Promise<number | undefined> {
   try {
-    const data = readFileSync(filePath, "utf8")
+    const data = await readFile(filePath, "utf8")
     return data.split(/\r?\n/).length
   } catch {
     return undefined
   }
 }
 
-registerPromptRenderer("read", (_event, params) => {
+registerPromptRenderer("read", async (_event, params) => {
   const filePath = typeof params.path === "string" ? params.path : "<unknown>"
   const offset = typeof params.offset === "number" ? params.offset : undefined
   const limit = typeof params.limit === "number" ? params.limit : undefined
@@ -18,7 +18,7 @@ registerPromptRenderer("read", (_event, params) => {
   const startStr = offset !== undefined ? `L${String(offset + 1).padStart(4, "0")}` : "<"
   const endVal = offset !== undefined && limit !== undefined ? offset + limit : (limit !== undefined ? limit : undefined)
   const endStr = endVal !== undefined ? `L${String(endVal).padStart(4, "0")}` : ">"
-  const totalLines = filePath !== "<unknown>" ? countLines(filePath) : undefined
+  const totalLines = filePath !== "<unknown>" ? await countLines(filePath) : undefined
   const countStr = totalLines !== undefined ? `${totalLines} lines` : (limit !== undefined ? `${limit} lines` : "? lines")
 
   return {
