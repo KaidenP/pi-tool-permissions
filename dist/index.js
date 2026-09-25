@@ -13,6 +13,18 @@ const PROMPT_CHOICES = [
     "Allow always (Project)",
     "Allow always (Global)",
 ];
+function resolveChoice(choice) {
+    let result;
+    switch (choice) {
+        case "Deny": return { action: "deny" };
+        case "Allow once": return { action: "allow-once" };
+        case "Allow only in this session": return { action: "persist", scope: "session" };
+        case "Allow always (Project-local)": return { action: "persist", scope: "projectLocal" };
+        case "Allow always (Project)": return { action: "persist", scope: "project" };
+        case "Allow always (Global)": return { action: "persist", scope: "global" };
+    }
+    return { action: "deny", scope: undefined };
+}
 function isRecord(value) {
     return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -94,25 +106,23 @@ export function createPermissionHandler(options = {}) {
                 return denied("No UI is available to approve this tool call");
             }
             const choice = await ctx.ui.select(makePromptTitle(event.toolName, event.input), [...PROMPT_CHOICES]);
-            const choiceIndex = PROMPT_CHOICES.indexOf(choice);
-            if (choiceIndex === 0) {
+            const selectedChoice = choice;
+            const result = selectedChoice ? resolveChoice(selectedChoice) : { action: "deny" };
+            if (result.action === "deny") {
                 logger(event.toolName, "Denied", "user-denied");
                 return denied("Permission denied by user");
             }
-            if (choiceIndex === 1) {
+            if (result.action === "allow-once") {
                 logger(event.toolName, "Allowed", "user-once");
                 return { block: false };
             }
-            if (choiceIndex < 0) {
-                logger(event.toolName, "Denied", "user-cancelled");
-                return denied("Permission denied by user");
-            }
             const rule = createAllowRule(event.toolName, normalizedParameters, priorityForNewAllowRule(winningRule));
-            let persistedTo;
+            let persistedTo = "";
             let projectGrantNeedsTrust = false;
             try {
-                switch (choiceIndex) {
-                    case 2:
+                if (result.action === "persist") {
+                    const p = result;
+                    if (p.scope === "session") {
                         if (paths.session) {
                             appendPermissionRule(paths.session, rule);
                             persistedTo = paths.session;
@@ -122,24 +132,25 @@ export function createPermissionHandler(options = {}) {
                             setRuleSource(rule, persistedTo);
                             sessionRulesInMemory.push(rule);
                         }
-                        break;
-                    case 3:
+                    }
+                    else if (p.scope === "projectLocal") {
                         appendPermissionRule(paths.projectLocal, rule);
                         persistedTo = paths.projectLocal;
                         projectGrantNeedsTrust = !projectTrusted;
-                        break;
-                    case 4:
+                    }
+                    else if (p.scope === "project") {
                         appendPermissionRule(paths.project, rule);
                         persistedTo = paths.project;
                         projectGrantNeedsTrust = !projectTrusted;
-                        break;
-                    case 5:
+                    }
+                    else if (p.scope === "global") {
                         appendPermissionRule(paths.global, rule);
                         persistedTo = paths.global;
-                        break;
-                    default:
-                        logger(event.toolName, "Denied", "user-cancelled");
-                        return denied("Permission denied by user");
+                    }
+                }
+                else {
+                    logger(event.toolName, "Denied", "user-cancelled");
+                    return denied("Permission denied by user");
                 }
             }
             catch (error) {

@@ -43,6 +43,26 @@ const PROMPT_CHOICES = [
   "Allow always (Global)",
 ] as const;
 
+type ChoiceKey = (typeof PROMPT_CHOICES)[number];
+
+type ChoiceResult =
+  | { action: "deny"; scope?: never }
+  | { action: "allow-once"; scope?: never }
+  | { action: "persist"; scope: "session" | "projectLocal" | "project" | "global" };
+
+function resolveChoice(choice: ChoiceKey): ChoiceResult {
+  let result: ChoiceResult;
+  switch (choice) {
+    case "Deny": return { action: "deny" };
+    case "Allow once": return { action: "allow-once" };
+    case "Allow only in this session": return { action: "persist", scope: "session" };
+    case "Allow always (Project-local)": return { action: "persist", scope: "projectLocal" };
+    case "Allow always (Project)": return { action: "persist", scope: "project" };
+    case "Allow always (Global)": return { action: "persist", scope: "global" };
+  }
+  return { action: "deny", scope: undefined as never } as ChoiceResult;
+}
+
 type PermissionLogger = (tool: string, action: string, source: string) => void;
 
 export interface PermissionHandlerOptions {
@@ -158,21 +178,17 @@ export function createPermissionHandler(options: PermissionHandlerOptions = {}) 
         makePromptTitle(event.toolName, event.input),
         [...PROMPT_CHOICES],
       );
-      const choiceIndex = PROMPT_CHOICES.indexOf(choice as (typeof PROMPT_CHOICES)[number]);
+      const selectedChoice = choice as ChoiceKey | undefined;
+      const result = selectedChoice ? resolveChoice(selectedChoice) : { action: "deny" };
 
-      if (choiceIndex === 0) {
+      if (result.action === "deny") {
         logger(event.toolName, "Denied", "user-denied");
         return denied("Permission denied by user");
       }
 
-      if (choiceIndex === 1) {
+      if (result.action === "allow-once") {
         logger(event.toolName, "Allowed", "user-once");
         return { block: false };
-      }
-
-      if (choiceIndex < 0) {
-        logger(event.toolName, "Denied", "user-cancelled");
-        return denied("Permission denied by user");
       }
 
       const rule = createAllowRule(
@@ -181,37 +197,35 @@ export function createPermissionHandler(options: PermissionHandlerOptions = {}) 
         priorityForNewAllowRule(winningRule),
       );
 
-      let persistedTo: string;
+      let persistedTo = "";
       let projectGrantNeedsTrust = false;
       try {
-        switch (choiceIndex) {
-          case 2:
-            if (paths.session) {
-              appendPermissionRule(paths.session, rule);
-              persistedTo = paths.session;
-            } else {
-              persistedTo = "session memory (ephemeral session)";
-              setRuleSource(rule, persistedTo);
-              sessionRulesInMemory.push(rule);
+        if (result.action === "persist") {
+          const p = result as { action: "persist"; scope: "session" | "projectLocal" | "project" | "global" };
+          if (p.scope === "session") {
+              if (paths.session) {
+                appendPermissionRule(paths.session, rule);
+                persistedTo = paths.session;
+              } else {
+                persistedTo = "session memory (ephemeral session)";
+                setRuleSource(rule, persistedTo);
+                sessionRulesInMemory.push(rule);
+              }
+            } else if (p.scope === "projectLocal") {
+              appendPermissionRule(paths.projectLocal, rule);
+              persistedTo = paths.projectLocal;
+              projectGrantNeedsTrust = !projectTrusted;
+            } else if (p.scope === "project") {
+              appendPermissionRule(paths.project, rule);
+              persistedTo = paths.project;
+              projectGrantNeedsTrust = !projectTrusted;
+            } else if (p.scope === "global") {
+              appendPermissionRule(paths.global, rule);
+              persistedTo = paths.global;
             }
-            break;
-          case 3:
-            appendPermissionRule(paths.projectLocal, rule);
-            persistedTo = paths.projectLocal;
-            projectGrantNeedsTrust = !projectTrusted;
-            break;
-          case 4:
-            appendPermissionRule(paths.project, rule);
-            persistedTo = paths.project;
-            projectGrantNeedsTrust = !projectTrusted;
-            break;
-          case 5:
-            appendPermissionRule(paths.global, rule);
-            persistedTo = paths.global;
-            break;
-          default:
-            logger(event.toolName, "Denied", "user-cancelled");
-            return denied("Permission denied by user");
+        } else {
+          logger(event.toolName, "Denied", "user-cancelled");
+          return denied("Permission denied by user");
         }
       } catch (error) {
         console.error("Failed to persist permission rule:", error);
