@@ -1,4 +1,14 @@
 import { registerPromptRenderer } from "../prompt-registry.js"
+import { readFileSync } from "node:fs"
+
+function countLines(filePath: string): number | undefined {
+  try {
+    const data = readFileSync(filePath, "utf8")
+    return data.split(/\r?\n/).length
+  } catch {
+    return undefined
+  }
+}
 
 registerPromptRenderer("read", (_event, params) => {
   const filePath = typeof params.path === "string" ? params.path : "<unknown>"
@@ -8,7 +18,8 @@ registerPromptRenderer("read", (_event, params) => {
   const startStr = offset !== undefined ? `L${String(offset + 1).padStart(4, "0")}` : "<"
   const endVal = offset !== undefined && limit !== undefined ? offset + limit : (limit !== undefined ? limit : undefined)
   const endStr = endVal !== undefined ? `L${String(endVal).padStart(4, "0")}` : ">"
-  const countStr = limit !== undefined ? `${limit} lines` : "? lines"
+  const totalLines = filePath !== "<unknown>" ? countLines(filePath) : undefined
+  const countStr = totalLines !== undefined ? `${totalLines} lines` : (limit !== undefined ? `${limit} lines` : "? lines")
 
   return {
     kind: "default",
