@@ -1,10 +1,14 @@
-import { Type, Static } from "typebox";
+import { Type, type Static } from "typebox";
 
-export const PermissionRuleSchema = Type.Object({
-  tool: Type.String(),
-  parameters: Type.Optional(Type.Record(Type.String(), Type.String())),
-  policy: Type.String(),
-  priority: Type.Optional(Type.Number({ default: 0 })),
-});
+// Additional rule keys are part of the extension API for custom policies.
+export const PermissionRuleSchema = Type.Object(
+  {
+    tool: Type.String(),
+    parameters: Type.Optional(Type.Record(Type.String(), Type.String())),
+    policy: Type.String(),
+    priority: Type.Optional(Type.Number({ default: 0 })),
+  },
+  { additionalProperties: true },
+);
 
 export type PermissionRule = Static<typeof PermissionRuleSchema>;

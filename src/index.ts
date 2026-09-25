@@ -1,134 +1,278 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { isToolCallEventType, CONFIG_DIR_NAME } from "@earendil-works/pi-coding-agent";
-import { PolicyRegistry, policyRegistryInstance } from "./policy-registry.js";
-import { loadConfig, getConfigPaths, resolveRules, normalizePath, interpolatePattern } from "./config-loader.js";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+  ToolCallEvent,
+  ToolCallEventResult,
+} from "@earendil-works/pi-coding-agent";
+import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
+import { homedir } from "node:os";
+import {
+  getConfigPaths,
+  getRuleSource,
+  loadConfig,
+  matchRule,
+  normalizeToolParams,
+  resolveRules,
+  setRuleSource,
+  type PermissionRuleRecord,
+} from "./config-loader.js";
 import { logDecision } from "./log.js";
-import { join } from "path";
-import { homedir } from "os";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { load, dump } from "js-yaml";
+import { appendPermissionRule, createAllowRule } from "./persistence.js";
+import {
+  PolicyRegistry,
+  policyRegistryInstance,
+  POLICY_REGISTRATION_EVENT,
+  type PolicyDecision,
+  type PolicyHandler,
+} from "./policy-registry.js";
 
-const registry = policyRegistryInstance;
+export {
+  PolicyRegistry,
+  policyRegistryInstance,
+  POLICY_REGISTRATION_EVENT,
+  registerPolicy,
+} from "./policy-registry.js";
+export type { PolicyDecision, PolicyHandler, PolicyHandlerContext } from "./policy-registry.js";
 
-// In-memory session rules for ephemeral sessions
-const sessionRulesInMemory: any[] = [];
+const PROMPT_CHOICES = [
+  "Allow once",
+  "Allow only in this session",
+  "Allow always (Project-local)",
+  "Allow always (Project)",
+  "Allow always (Global)",
+] as const;
 
-function persistRule(scopePath: string, rule: any) {
-  try {
-    const dir = scopePath.substring(0, scopePath.lastIndexOf("/") || scopePath.lastIndexOf("\\"));
-    if (dir && !existsSync(dir)) mkdirSync(dir, { recursive: true });
-    let arr: any[] = [];
-    if (existsSync(scopePath)) {
-      const content = readFileSync(scopePath, "utf8");
-      const parsed = load(content);
-      if (Array.isArray(parsed)) arr = parsed;
-    }
-    arr.push(rule);
-    writeFileSync(scopePath, dump(arr));
-  } catch (e) {
-    console.error("Failed to persist rule:", e);
-  }
+type PermissionLogger = (tool: string, action: string, source: string) => void;
+
+export interface PermissionHandlerOptions {
+  /** Override the home directory and logger in tests or embedded runtimes. */
+  homeDir?: string;
+  logger?: PermissionLogger;
+  registry?: PolicyRegistry;
 }
 
-export default function (pi: ExtensionAPI) {
-  pi.on("tool_call", async (event, ctx) => {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function makePromptTitle(toolName: string, parameters: Record<string, unknown>): string {
+  const args = JSON.stringify(parameters, null, 2) ?? "{}";
+  return `Permission required for ${toolName}\n\nArguments:\n${args}`;
+}
+
+function priorityForNewAllowRule(winningRule: PermissionRuleRecord): number {
+  const current = Math.max(0, winningRule.priority ?? 0);
+  const increment = Math.max(1, Math.abs(current) * Number.EPSILON * 2);
+  const candidate = current + increment;
+  return Number.isFinite(candidate) && candidate > current ? candidate : current;
+}
+
+function denied(reason: string): ToolCallEventResult {
+  return { block: true, reason, terminate: true };
+}
+
+/**
+ * Create the tool-call middleware. Session-only rules for ephemeral sessions
+ * are deliberately scoped to this handler instance and cannot leak to another
+ * session after a reload or session switch.
+ */
+export function createPermissionHandler(options: PermissionHandlerOptions = {}) {
+  const registry = options.registry ?? policyRegistryInstance;
+  const logger = options.logger ?? logDecision;
+  const sessionRulesInMemory: PermissionRuleRecord[] = [];
+
+  return async (
+    event: ToolCallEvent,
+    ctx: ExtensionContext,
+  ): Promise<ToolCallEventResult> => {
+    let logSource = "permission-middleware";
+
     try {
-      if (!isToolCallEventType(event.toolName as string, event)) {
-        return { block: false };
+      const toolName = event.toolName;
+      // Use Pi's event guard for typed access. A failed guard is a fail-closed
+      // condition, never a reason to let the tool call through.
+      if (!isToolCallEventType<string, Record<string, unknown>>(toolName, event)) {
+        logger(toolName, "Denied", "unrecognized-tool-call-event");
+        return denied("Unable to inspect tool call for permission evaluation");
       }
+
+      if (!isRecord(event.input)) {
+        logger(event.toolName, "Denied", "invalid-tool-input");
+        return denied("Tool arguments were not a valid object");
+      }
+
       const cwd = ctx.cwd || process.cwd();
-      const sessionFile = (ctx as any).sessionManager?.getSessionFile?.();
-      const paths = getConfigPaths(cwd, sessionFile);
+      const normalizedParameters = normalizeToolParams(event.toolName, event.input, cwd);
+      const sessionFile = ctx.sessionManager.getSessionFile();
+      const paths = getConfigPaths(cwd, sessionFile, options.homeDir ?? homedir());
+
+      const globalRules = loadConfig(paths.global);
+      // Project permission files can grant execution. Do not honor project
+      // configuration until Pi has resolved trust for the current project.
+      const projectTrusted = ctx.isProjectTrusted();
+      const projectRules = projectTrusted ? loadConfig(paths.project) : [];
+      const projectLocalRules = projectTrusted ? loadConfig(paths.projectLocal) : [];
+      const sessionRules = paths.session ? loadConfig(paths.session) : [];
       const scopes = [
-        loadConfig(paths.global),
-        loadConfig(paths.project),
-        loadConfig(paths.projectLocal),
-        (sessionFile && paths.session) ? loadConfig(paths.session) : sessionRulesInMemory,
+        globalRules,
+        projectRules,
+        projectLocalRules,
+        [...sessionRules, ...sessionRulesInMemory],
       ];
 
-      const paramsRaw = (event as any).input || {};
-      const normalizedParams: any = {};
-      for (const [k, v] of Object.entries(paramsRaw)) {
-        if (typeof v === "string") {
-          normalizedParams[k] = normalizePath(v, cwd);
-        } else {
-          normalizedParams[k] = v;
-        }
+      const winningRule = resolveRules(scopes, event.toolName, normalizedParameters, cwd);
+      logSource = getRuleSource(winningRule) ?? (winningRule.virtual ? "<default ask>" : "<configuration>");
+
+      const policyDecision: PolicyDecision = await registry.resolve(
+        winningRule.policy,
+        winningRule.priority ?? 0,
+        {
+          rule: winningRule,
+          event,
+          extensionContext: ctx,
+          cwd,
+          parameters: normalizedParameters,
+        },
+      );
+
+      if (policyDecision.decision === "deny") {
+        logger(event.toolName, "Denied", logSource);
+        return denied(`Denied by permission policy "${winningRule.policy}"`);
       }
 
-      const winningRule = resolveRules(scopes, event.toolName, normalizedParams, cwd);
-      const decision = await registry.resolve(winningRule);
-
-      if (decision.decision === "deny") {
-        const source = winningRule?.source || (winningRule ? "config" : "default-deny");
-        logDecision(event.toolName, "Denied", source);
-        return { block: true, reason: "Denied by permission policy", terminate: true };
-      }
-
-      if (decision.decision === "ask") {
-        if (!ctx.hasUI) {
-          logDecision(event.toolName, "Denied (no UI)", "default");
-          return { block: true, reason: "No UI available - default deny for ask", terminate: true };
-        }
-        const labels = [
-          "Allow once",
-          "Allow only in this session",
-          "Allow always (Project-local)",
-          "Allow always (Project)",
-          "Allow always (Global)",
-        ];
-        const choiceLabel = await ctx.ui.select("Permission", labels) || "";
-        const choiceIndex = labels.indexOf(choiceLabel);
-        if (choiceIndex === 0) {
-          logDecision(event.toolName, "Allowed", "user-once");
-          return { block: false };
-        }
-        const rule = { tool: event.toolName, parameters: normalizedParams, policy: "allow", priority: 0 };
-        if (choiceIndex === 1) {
-          if (paths.session) {
-            persistRule(paths.session, rule);
-            logDecision(event.toolName, "Allowed", paths.session || "session-persisted");
-          } else {
-            sessionRulesInMemory.push(rule);
-            logDecision(event.toolName, "Allowed", "session-memory");
-          }
-        } else if (choiceIndex === 2) {
-          persistRule(paths.projectLocal, rule);
-          logDecision(event.toolName, "Allowed", paths.projectLocal);
-        } else if (choiceIndex === 3) {
-          persistRule(paths.project, rule);
-          logDecision(event.toolName, "Allowed", paths.project);
-        } else if (choiceIndex === 4) {
-          persistRule(paths.global, rule);
-          logDecision(event.toolName, "Allowed", paths.global);
-        } else {
-          logDecision(event.toolName, "Denied", "user-cancelled");
-          return { block: true, reason: "Denied by user", terminate: true };
-        }
+      if (policyDecision.decision === "allow") {
+        logger(event.toolName, "Allowed", logSource);
         return { block: false };
       }
 
-      if (decision.decision === "allow") {
-        const source = winningRule?.source || (winningRule ? "config" : "default");
-        logDecision(event.toolName, "Allowed", source);
-        return { block: false };
-      }
-
-      // Unknown policy fallback to ask
+      // Unknown/custom decision strings are treated as ask, so custom policies
+      // cannot accidentally bypass the user-consent path.
+      logger(event.toolName, "Asked", logSource);
       if (!ctx.hasUI) {
-        logDecision(event.toolName, "Denied (no UI)", "unknown-policy");
-        return { block: true, reason: "Unknown policy and no UI", terminate: true };
+        logger(event.toolName, "Denied", `${logSource} (no UI available)`);
+        return denied("No UI is available to approve this tool call");
       }
-      const ok = await ctx.ui.confirm("Permission", `Unknown policy for ${event.toolName}. Allow once?`);
-      if (!ok) {
-        logDecision(event.toolName, "Denied", "user");
-        return { block: true, reason: "Denied by user", terminate: true };
+
+      const choice = await ctx.ui.select(
+        makePromptTitle(event.toolName, event.input),
+        [...PROMPT_CHOICES],
+      );
+      const choiceIndex = PROMPT_CHOICES.indexOf(choice as (typeof PROMPT_CHOICES)[number]);
+
+      if (choiceIndex === 0) {
+        logger(event.toolName, "Allowed", "user-once");
+        return { block: false };
       }
-      logDecision(event.toolName, "Allowed", "user-unknown-policy");
+
+      if (choiceIndex < 0) {
+        logger(event.toolName, "Denied", "user-cancelled");
+        return denied("Permission denied by user");
+      }
+
+      const rule = createAllowRule(
+        event.toolName,
+        normalizedParameters,
+        priorityForNewAllowRule(winningRule),
+      );
+
+      let persistedTo: string;
+      let projectGrantNeedsTrust = false;
+      try {
+        switch (choiceIndex) {
+          case 1:
+            if (paths.session) {
+              appendPermissionRule(paths.session, rule);
+              persistedTo = paths.session;
+            } else {
+              persistedTo = "session memory (ephemeral session)";
+              setRuleSource(rule, persistedTo);
+              sessionRulesInMemory.push(rule);
+            }
+            break;
+          case 2:
+            appendPermissionRule(paths.projectLocal, rule);
+            persistedTo = paths.projectLocal;
+            projectGrantNeedsTrust = !projectTrusted;
+            break;
+          case 3:
+            appendPermissionRule(paths.project, rule);
+            persistedTo = paths.project;
+            projectGrantNeedsTrust = !projectTrusted;
+            break;
+          case 4:
+            appendPermissionRule(paths.global, rule);
+            persistedTo = paths.global;
+            break;
+          default:
+            logger(event.toolName, "Denied", "user-cancelled");
+            return denied("Permission denied by user");
+        }
+      } catch (error) {
+        console.error("Failed to persist permission rule:", error);
+        if (ctx.hasUI) {
+          ctx.ui.notify(
+            "Could not save this permission; allowing this call once only.",
+            "warning",
+          );
+        }
+        logger(event.toolName, "Allowed", "user-once (persistence failed)");
+        return { block: false };
+      }
+
+      if (projectGrantNeedsTrust) {
+        const memorySource = "session memory (project trust pending)";
+        setRuleSource(rule, memorySource);
+        sessionRulesInMemory.push(rule);
+        try {
+          if (ctx.hasUI) {
+            ctx.ui.notify(
+              "Saved the project grant. It applies for this session; Pi project trust is required to honor it after restart.",
+              "warning",
+            );
+          }
+        } catch (error) {
+          console.error("Could not notify about pending project trust:", error);
+        }
+      }
+
+      logger(event.toolName, "Allowed", persistedTo);
       return { block: false };
-    } catch (e) {
-      console.error("Permission middleware error:", e);
-      return { block: true, reason: "Permission middleware error", terminate: true };
+    } catch (error) {
+      console.error("Permission middleware error:", error);
+      try {
+        logger(event.toolName, "Denied", logSource);
+      } catch (loggingError) {
+        console.error("Failed to record permission middleware error:", loggingError);
+      }
+      return denied("Permission middleware error; tool call blocked");
+    }
+  };
+}
+
+export default function (pi: ExtensionAPI): void {
+  const unregisterPolicies: Array<() => void> = [];
+  const removePolicyListener = pi.events.on(POLICY_REGISTRATION_EVENT, (registration: unknown) => {
+    if (
+      !isRecord(registration) ||
+      typeof registration.key !== "string" ||
+      typeof registration.handler !== "function"
+    ) {
+      console.error(`Ignored invalid policy registration on ${POLICY_REGISTRATION_EVENT}`);
+      return;
+    }
+
+    try {
+      unregisterPolicies.push(
+        policyRegistryInstance.register(registration.key, registration.handler as PolicyHandler),
+      );
+    } catch (error) {
+      console.error("Failed to register permission policy:", error);
     }
   });
+
+  pi.on("session_shutdown", () => {
+    removePolicyListener();
+    for (const unregister of unregisterPolicies.splice(0)) unregister();
+  });
+  pi.on("tool_call", createPermissionHandler());
 }
