@@ -16,3 +16,5 @@ export class PolicyRegistry {
     return await handler(rule);
   }
 }
+
+export const policyRegistryInstance = new PolicyRegistry();

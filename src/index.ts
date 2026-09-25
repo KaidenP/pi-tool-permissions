@@ -1,14 +1,17 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { isToolCallEventType, CONFIG_DIR_NAME } from "@earendil-works/pi-coding-agent";
-import { PolicyRegistry } from "./policy-registry";
-import { loadConfig, getConfigPaths, resolveRules, normalizePath, interpolatePattern } from "./config-loader";
-import { logDecision } from "./log";
+import { PolicyRegistry, policyRegistryInstance } from "./policy-registry.js";
+import { loadConfig, getConfigPaths, resolveRules, normalizePath, interpolatePattern } from "./config-loader.js";
+import { logDecision } from "./log.js";
 import { join } from "path";
 import { homedir } from "os";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { load, dump } from "js-yaml";
 
-const registry = new PolicyRegistry();
+const registry = policyRegistryInstance;
+
+// In-memory session rules for ephemeral sessions
+const sessionRulesInMemory: any[] = [];
 
 function persistRule(scopePath: string, rule: any) {
   try {
@@ -40,7 +43,7 @@ export default function (pi: ExtensionAPI) {
         loadConfig(paths.global),
         loadConfig(paths.project),
         loadConfig(paths.projectLocal),
-        sessionFile && paths.session ? loadConfig(paths.session) : [],
+        (sessionFile && paths.session) ? loadConfig(paths.session) : sessionRulesInMemory,
       ];
 
       const paramsRaw = (event as any).input || {};
@@ -57,7 +60,8 @@ export default function (pi: ExtensionAPI) {
       const decision = await registry.resolve(winningRule);
 
       if (decision.decision === "deny") {
-        logDecision(event.toolName, "Denied", winningRule ? "config" : "default-deny");
+        const source = winningRule?.source || (winningRule ? "config" : "default-deny");
+        logDecision(event.toolName, "Denied", source);
         return { block: true, reason: "Denied by permission policy", terminate: true };
       }
 
@@ -81,18 +85,22 @@ export default function (pi: ExtensionAPI) {
         }
         const rule = { tool: event.toolName, parameters: normalizedParams, policy: "allow", priority: 0 };
         if (choiceIndex === 1) {
-          const sp = paths.session || join(cwd, CONFIG_DIR_NAME, ".permissions.yaml");
-          persistRule(sp, rule);
-          logDecision(event.toolName, "Allowed", "session-persisted");
+          if (paths.session) {
+            persistRule(paths.session, rule);
+            logDecision(event.toolName, "Allowed", paths.session || "session-persisted");
+          } else {
+            sessionRulesInMemory.push(rule);
+            logDecision(event.toolName, "Allowed", "session-memory");
+          }
         } else if (choiceIndex === 2) {
           persistRule(paths.projectLocal, rule);
-          logDecision(event.toolName, "Allowed", "project-local-persisted");
+          logDecision(event.toolName, "Allowed", paths.projectLocal);
         } else if (choiceIndex === 3) {
           persistRule(paths.project, rule);
-          logDecision(event.toolName, "Allowed", "project-persisted");
+          logDecision(event.toolName, "Allowed", paths.project);
         } else if (choiceIndex === 4) {
           persistRule(paths.global, rule);
-          logDecision(event.toolName, "Allowed", "global-persisted");
+          logDecision(event.toolName, "Allowed", paths.global);
         } else {
           logDecision(event.toolName, "Denied", "user-cancelled");
           return { block: true, reason: "Denied by user", terminate: true };
@@ -101,7 +109,8 @@ export default function (pi: ExtensionAPI) {
       }
 
       if (decision.decision === "allow") {
-        logDecision(event.toolName, "Allowed", winningRule ? "config" : "default");
+        const source = winningRule?.source || (winningRule ? "config" : "default");
+        logDecision(event.toolName, "Allowed", source);
         return { block: false };
       }
 

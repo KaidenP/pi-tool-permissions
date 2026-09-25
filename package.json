@@ -1,6 +1,7 @@
 {
   "name": "pi-tool-permissions",
   "version": "1.0.0",
+  "type": "module",
   "main": "src/index.ts",
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^0.85.1",

@@ -1,7 +1,4 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.PolicyRegistry = void 0;
-class PolicyRegistry {
+export class PolicyRegistry {
     handlers = new Map();
     constructor() {
         this.register("allow", async (r) => ({ decision: "allow", priority: r.priority ?? 0 }));
@@ -18,4 +15,4 @@ class PolicyRegistry {
         return await handler(rule);
     }
 }
-exports.PolicyRegistry = PolicyRegistry;
+export const policyRegistryInstance = new PolicyRegistry();

@@ -1,7 +1,8 @@
 import { test, describe } from "node:test";
 import assert from "node:assert";
-import { PolicyRegistry } from "./policy-registry";
-import { matchRule, resolveRules, normalizePath, interpolatePattern } from "./config-loader";
+import { writeFileSync, unlinkSync } from "node:fs";
+import { PolicyRegistry } from "./policy-registry.js";
+import { matchRule, resolveRules, normalizePath, interpolatePattern, loadConfig } from "./config-loader.js";
 
 describe("PolicyRegistry", () => {
   test("default allow/deny/ask registered", async () => {
@@ -38,5 +39,38 @@ describe("Config loader", () => {
     ];
     const result = resolveRules(rules, "bash", {});
     assert.strictEqual(result.policy, "ask");
+  });
+  test("resolveRules returns virtual ask when no rules match", () => {
+    const result = resolveRules([[{ tool: "bash", policy: "deny" }]], "read", {});
+    assert.strictEqual(result.policy, "ask");
+    assert.strictEqual(result.priority, 0);
+  });
+  test("resolveRules tie-breaks to last entry", () => {
+    const rules = [
+      [{ tool: "bash", policy: "deny", priority: 2 }],
+      [{ tool: "bash", policy: "allow", priority: 2 }],
+    ];
+    const result = resolveRules(rules, "bash", {});
+    assert.strictEqual(result.policy, "allow");
+  });
+});
+
+describe("Configuration loading", () => {
+  test("loadConfig preserves extra keys", () => {
+    const tmpFile = "/tmp/test_permissions_extra.yaml";
+    writeFileSync(tmpFile, "- tool: bash\n  policy: deny\n  priority: 1\n  extraKey: value\n");
+    const rules = loadConfig(tmpFile);
+    assert.strictEqual(rules.length, 1);
+    assert.strictEqual(rules[0].extraKey, "value");
+    assert.strictEqual(rules[0].source, tmpFile);
+    unlinkSync(tmpFile);
+  });
+
+  test("loadConfig handles empty file", () => {
+    const tmpFile = "/tmp/test_permissions_empty.yaml";
+    writeFileSync(tmpFile, "");
+    const rules = loadConfig(tmpFile);
+    assert.strictEqual(rules.length, 0);
+    unlinkSync(tmpFile);
   });
 });

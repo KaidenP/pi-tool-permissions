@@ -4,7 +4,7 @@ import { resolve, normalize } from "path";
 import { realpathSync } from "fs";
 import { Type } from "typebox";
 import { Check } from "typebox/schema";
-import { PermissionRuleSchema } from "./schemas";
+import { PermissionRuleSchema } from "./schemas.js";
 import { homedir } from "os";
 import { join } from "path";
 import { CONFIG_DIR_NAME } from "@earendil-works/pi-coding-agent";
@@ -18,6 +18,8 @@ export function loadConfig(path: string): any {
     console.error("Failed to read config:", path);
     process.exit(1);
   }
+  // Handle empty or whitespace-only files gracefully
+  if (raw.trim().length === 0) return [];
   let parsed: any;
   try {
     parsed = load(raw);
@@ -32,18 +34,16 @@ export function loadConfig(path: string): any {
   const rules: any[] = [];
   for (const item of parsed) {
     if (item && typeof item === "object") {
-      // Ignore extra keys automatically by selecting only schema keys via TypeBox validation
       if (!Check(PermissionRuleSchema, item)) {
         console.error("Invalid config rule (TypeBox validation failed):", item);
         process.exit(1);
       }
-      const cleaned: any = {};
-      const anyItem = item as any;
-      for (const [k, v] of Object.entries(PermissionRuleSchema.properties)) {
-        if (k in anyItem) cleaned[k] = anyItem[k];
-      }
-      cleaned.priority = anyItem.priority ?? 0;
-      rules.push(cleaned);
+      // Preserve all original keys (including extra/unknown keys) so future extensions can use them
+      const preserved: any = { ...item };
+      preserved.priority = item.priority ?? 0;
+      // Annotate with source file for logging, but don't persist it
+      preserved.source = path;
+      rules.push(preserved);
     }
   }
   return rules;
@@ -78,8 +78,13 @@ export function matchRule(rule: any, toolName: string, params: any, cwd?: string
   const parameters = rule.parameters || {};
   for (const [key, regexStr] of Object.entries(parameters)) {
     if (!(key in params)) return false;
-    const regex = new RegExp(interpolatePattern(String(regexStr), cwd));
-    if (!regex.test(String(params[key]))) return false;
+    try {
+      const regex = new RegExp(interpolatePattern(String(regexStr), cwd));
+      if (!regex.test(String(params[key]))) return false;
+    } catch (e) {
+      // Invalid regex pattern: treat as non-match for robustness
+      return false;
+    }
   }
   return true;
 }
