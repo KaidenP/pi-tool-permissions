@@ -10,9 +10,9 @@ The system is designed to be extensible, allowing other extensions to register c
 ---
 
 ## Quick Links
-- [Phase 1: Configuration Engine & Foundation](PROJECT_PROMPT_PHASE_01.md)
-- [Phase 2: Interception & User Interaction](PROJECT_PROMPT_PHASE_02.md)
-- [Phase 3: Validation & Refinement](PROJECT_PROMPT_PHASE_03.md)
+- [Phase 1: Configuration Engine & Foundation](SPEC_01.md)
+- [Phase 2: Interception & User Interaction](SPEC_02.md)
+- [Phase 3: Validation & Refinement](SPEC_03.md)
 
 ---
 
