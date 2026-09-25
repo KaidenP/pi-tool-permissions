@@ -32,6 +32,8 @@ import {
 } from "./prompt-registry.js"
 import "./renderers/edit.js"
 import "./renderers/read.js"
+import "./renderers/bash.js"
+import "./renderers/write.js"
 
 export {
   PolicyRegistry,
