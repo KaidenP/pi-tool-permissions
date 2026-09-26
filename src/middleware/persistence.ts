@@ -10,6 +10,13 @@ export interface PersistenceResult {
   memorySource?: string;
 }
 
+/**
+ * Logic for persisting a user's permission choice.
+ * 
+ * The choice may be stored in different scopes (global, project, session),
+ * depending on the user's selection. If project trust is not yet established,
+ * grants are stored in memory until the project is trusted.
+ */
 export function persistChoice(
   result: { action: "persist"; scope: string },
   paths: { session?: string; projectLocal: string; project: string; global: string },
@@ -17,6 +24,7 @@ export function persistChoice(
   sessionRulesInMemory: PermissionRuleRecord[],
   projectTrusted: boolean,
 ): PersistenceResult {
+
   let persistedTo = "";
   let projectGrantNeedsTrust = false;
   const p = result as { action: "persist"; scope: "session" | "projectLocal" | "project" | "global" };

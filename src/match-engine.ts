@@ -99,12 +99,24 @@ export function normalizePathPattern(
   return `${startAnchor}${escapeRegExp(absolutePrefix)}${suffix}${endAnchor}`;
 }
 
+/**
+ * Matches a specific tool call against a permission rule.
+ * 
+ * The matching process:
+ * 1. Checks if the tool name matches.
+ * 2. If the rule has no parameters, it's a broad match for the tool.
+ * 3. If a parameter is defined in the rule, the corresponding parameter in the tool call
+ *    must exist and match the regex pattern defined in the rule.
+ * 4. Path-related parameters are normalized to absolute paths before matching.
+ * 5. Non-path parameters are converted to strings.
+ */
 export function matchRule(
   rule: PermissionRuleRecord | Record<string, unknown>,
   toolName: string,
   params: Record<string, unknown>,
   cwd = process.cwd(),
 ): boolean {
+
   if (rule.tool !== toolName) return false;
   const parameters = rule.parameters;
   if (parameters === undefined) return true;
@@ -128,12 +140,21 @@ export function matchRule(
   return true;
 }
 
+/**
+ * Resolves the winning permission rule for a given tool call from a list of scopes.
+ * 
+ * Scopes are ordered by priority (global -> project -> project-local -> session).
+ * Within a scope, rules that match are filtered.
+ * From all matching rules across all scopes, the one with the highest priority wins.
+ * If no rules match, a virtual "ask" rule is returned.
+ */
 export function resolveRules(
   rulesList: PermissionRuleRecord[][],
   toolName: string,
   params: Record<string, unknown>,
   cwd = process.cwd(),
 ): PermissionRuleRecord {
+
   const matches = rulesList.flat().filter((rule) => matchRule(rule, toolName, params, cwd));
   if (matches.length === 0) {
     return { tool: toolName, policy: "ask", priority: 0, virtual: true };

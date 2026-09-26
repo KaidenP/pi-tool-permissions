@@ -21,11 +21,17 @@ function escapeRegExp(value: string): string {
  * Create a narrow rule for the exact arguments the user approved. Matching
  * these values as escaped, anchored regexes avoids accidentally broad grants.
  */
+/**
+ * Creates a rule that precisely allows the specific arguments provided.
+ * This is used when a user selects "Allow once" or a persistent "Allow" option.
+ * The patterns are created as anchored regexes to avoid accidental broad grants.
+ */
 export function createAllowRule(
   tool: string,
   parameters: Record<string, unknown>,
   priority: number,
 ): PermissionRuleRecord {
+
   const patterns: Record<string, string> = {};
   for (const [key, value] of Object.entries(parameters)) {
     patterns[key] = `^${escapeRegExp(parameterValueToString(value))}$`;
@@ -41,7 +47,12 @@ export function createAllowRule(
 
 /** Append a validated rule without discarding existing or extension-owned keys. */
 /** Atomic persistence: write to temp file then rename to avoid partial reads. */
+/**
+ * Atomically persists a permission rule to a YAML file.
+ * Uses a temporary file and rename operation to prevent corrupting the config file.
+ */
 export function appendPermissionRule(path: string, rule: PermissionRuleRecord): void {
+
   const directory = dirname(path);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
 

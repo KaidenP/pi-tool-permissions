@@ -229,7 +229,15 @@ export function createPermissionHandler(options: PermissionHandlerOptions = {}) 
   }
 }
 
+/**
+ * Main entry point for the permissions extension.
+ * 
+ * It registers the permission middleware on the `tool_call` event, 
+ * allowing it to intercept and evaluate every tool call before it reaches the handler.
+ * It also provides a bypass mode and policy registration mechanism.
+ */
 export default function (pi: ExtensionAPI): void {
+
   const unregisterPolicies: Array<() => void> = []
   const removePolicyListener = pi.events.on(POLICY_REGISTRATION_EVENT, (registration: unknown) => {
     if (

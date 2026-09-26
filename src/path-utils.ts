@@ -39,11 +39,16 @@ function canonicalizeIncludingMissingTail(absolutePath: string): string {
   }
 }
 
+/**
+ * Normalized paths are used for both rule matching and persistence to ensure consistency
+ * regardless of how a path is referenced (e.g., absolute vs relative, symlinks).
+ */
 export function normalizePath(path: string, cwd = process.cwd()): string {
   const expanded = expandToolPath(path);
   const absolutePath = isAbsolute(expanded) ? resolve(expanded) : resolve(cwd, expanded);
   return canonicalizeIncludingMissingTail(absolutePath);
 }
+
 
 export function interpolatePattern(
   pattern: string,
